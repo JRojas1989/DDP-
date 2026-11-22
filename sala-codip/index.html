@@ -1,0 +1,607 @@
+<title>Sala CODIP</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chakra+Petch:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: one-screen room. A 3D map of Lima fills the view; glass panels float at the left and right edges, the command dock sits at the bottom. */
+:root{
+  color-scheme: dark;
+  --bg:#050d1a; --bg2:#0a1a30;
+  --glass:rgba(10,32,58,.62); --line:rgba(110,220,255,.28); --line-strong:rgba(110,220,255,.6);
+  --ink:#e6f7ff; --ink2:#9cc4d8; --ink3:#6690a6;
+  --holo:#5fe3ff; --holo-dim:#2a7fb0; --mark:#49c8ee; --track:rgba(110,220,255,.1);
+  --amber:#ffb84a;
+  --display:"Chakra Petch","Segoe UI",system-ui,sans-serif;
+  --mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+}
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%}
+body{background:var(--bg);color:var(--ink);font-family:var(--display);font-size:14px;overflow:hidden;position:relative}
+#scene{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+#scene.drag{cursor:grabbing}
+.hud{position:absolute;inset:0;pointer-events:none;display:grid;grid-template-columns:minmax(0,1fr);grid-template-rows:auto minmax(0,1fr) auto;gap:10px;padding-block:10px;
+  padding-left:max(16px, env(safe-area-inset-left, 0px));padding-right:max(16px, env(safe-area-inset-right, 0px))}
+.hud > *{min-width:0}
+.hud button,.hud input,.hud .panel,.hud .dock,.hud .top > *{pointer-events:auto}
+
+/* top bar */
+.top{display:flex;flex-wrap:wrap;align-items:center;gap:8px 14px}
+.brand{font-weight:600;font-size:20px;letter-spacing:.14em;text-transform:uppercase;color:var(--ink)}
+.brand small{display:block;font:400 11px var(--mono);letter-spacing:.04em;color:var(--ink2);text-transform:none}
+.status{font:400 11px var(--mono);color:var(--amber);border:1px solid rgba(255,184,74,.45);padding:3px 8px;border-radius:2px;background:rgba(255,184,74,.07)}
+.status.full{color:var(--holo);border-color:var(--line)}
+.spacer{flex:1}
+.btn{font:500 12px var(--display);letter-spacing:.08em;text-transform:uppercase;color:var(--ink);background:var(--glass);border:1px solid var(--line);
+  padding:7px 11px;border-radius:2px;cursor:pointer;backdrop-filter:blur(6px)}
+.btn:hover{border-color:var(--line-strong);color:var(--holo)}
+.btn[aria-pressed="true"]{background:rgba(95,227,255,.18);border-color:var(--holo);color:var(--holo)}
+.btn:focus-visible,input:focus-visible,.row:focus-visible,.chip:focus-visible{outline:2px solid var(--amber);outline-offset:2px}
+
+/* floating panels */
+.mid{display:flex;justify-content:space-between;gap:12px;min-height:0;perspective:1400px}
+.col{display:flex;flex-direction:column;gap:10px;width:min(292px,30vw);min-height:0;overflow-y:auto;scrollbar-width:thin;pointer-events:none;transition:transform .5s}
+.col.left{transform:rotateY(9deg);transform-origin:left center}
+.col.right{transform:rotateY(-9deg);transform-origin:right center}
+.panel{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(7px);padding:10px 12px 12px;position:relative;
+  clip-path:polygon(0 0,calc(100% - 12px) 0,100% 12px,100% 100%,12px 100%,0 calc(100% - 12px))}
+.panel h2{margin:0 0 8px;font:500 11px var(--display);letter-spacing:.16em;text-transform:uppercase;color:var(--ink2);display:flex;justify-content:space-between;gap:8px;align-items:center}
+.panel h2 .sub{font:400 10px var(--mono);letter-spacing:0;text-transform:none;color:var(--ink3)}
+.kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px 12px}
+.kpi b{display:block;font:600 22px var(--display);color:var(--ink);font-variant-numeric:tabular-nums;line-height:1.1}
+.kpi span{font:400 10px var(--mono);color:var(--ink2)}
+.kpi.wide{grid-column:1 / -1}
+.kpi.wide b{font-size:30px;color:var(--holo)}
+.seg{display:flex;gap:4px}
+.seg button{font:500 10px var(--display);letter-spacing:.06em;text-transform:uppercase;background:none;border:1px solid transparent;color:var(--ink3);padding:2px 5px;cursor:pointer;border-radius:2px}
+.seg button[aria-pressed="true"]{color:var(--holo);border-color:var(--line)}
+.rows{display:flex;flex-direction:column;gap:5px}
+.row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:1px 8px;cursor:pointer;background:none;border:0;padding:0;text-align:left;color:inherit;font:inherit}
+.row .nm{font-size:12px;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.row .vl{font:400 11px var(--mono);color:var(--ink2);font-variant-numeric:tabular-nums}
+.row .bar{grid-column:1 / -1;height:5px;background:var(--track);border-radius:0 3px 3px 0}
+.row .bar i{display:block;height:100%;background:var(--mark);border-radius:0 3px 3px 0;transition:width .5s}
+.row:hover .bar i,.row.on .bar i{background:var(--amber)}
+.years{display:flex;align-items:flex-end;gap:2px;height:92px;padding-top:14px}
+.yr{flex:1;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;height:100%;position:relative;min-width:0}
+.yr i{display:block;width:100%;max-width:22px;background:var(--mark);border-radius:3px 3px 0 0;transition:height .5s;min-height:1px}
+.yr:hover i{background:var(--amber)}
+.yr.part i{background:repeating-linear-gradient(135deg,var(--mark) 0 3px,var(--holo-dim) 3px 6px)}
+.yr em{position:absolute;top:-13px;font:400 9px var(--mono);font-style:normal;color:var(--ink2)}
+.yl{display:flex;gap:2px;margin-top:3px}
+.yl span{flex:1;text-align:center;font:400 9px var(--mono);color:var(--ink3)}
+.note{font:400 10px var(--mono);color:var(--ink3);margin-top:6px}
+.ficha dl{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin:0;font-size:12px}
+.ficha dt{color:var(--ink3);font:400 10px var(--mono);align-self:center}
+.ficha dd{margin:0;color:var(--ink);text-align:right;font-variant-numeric:tabular-nums}
+.ficha h3{margin:0 0 6px;font:600 16px var(--display);color:var(--amber);text-wrap:balance}
+.legend{display:flex;align-items:center;gap:6px;font:400 10px var(--mono);color:var(--ink2)}
+.legend i{flex:1;height:6px;border-radius:3px;background:linear-gradient(90deg,#1d5fb0,#5fe3ff,#f2fbff)}
+
+/* dock */
+.dock{background:var(--glass);border:1px solid var(--line);backdrop-filter:blur(8px);padding:10px 12px;display:flex;flex-direction:column;gap:8px;max-width:860px;width:100%;margin:0 auto}
+.say{display:flex;gap:10px;align-items:flex-start;min-height:34px}
+.say .who{font:600 11px var(--display);letter-spacing:.16em;color:var(--holo);padding-top:2px;flex:none}
+.say p{margin:0;font-size:14px;line-height:1.4;color:var(--ink);max-height:5.6em;overflow-y:auto;min-width:0}
+.cmd{display:flex;gap:6px}
+.cmd input{flex:1;min-width:0;background:rgba(0,10,22,.6);border:1px solid var(--line);color:var(--ink);font:400 14px var(--mono);padding:9px 10px;border-radius:2px}
+.cmd input::placeholder{color:var(--ink3)}
+.chips{display:flex;gap:6px;overflow-x:auto;scrollbar-width:none}
+.chip{flex:none;font:400 11px var(--mono);color:var(--ink2);background:none;border:1px solid var(--line);padding:3px 8px;border-radius:10px;cursor:pointer}
+.chip:hover{color:var(--holo);border-color:var(--holo)}
+.chip.f{color:var(--amber);border-color:rgba(255,184,74,.5)}
+#tip{position:absolute;z-index:5;pointer-events:none;background:rgba(4,16,30,.94);border:1px solid var(--line-strong);padding:6px 9px;font:400 11px var(--mono);color:var(--ink2);max-width:240px;border-radius:2px}
+#tip b{display:block;font:600 13px var(--display);color:var(--ink)}
+#drop{position:absolute;inset:0;z-index:9;display:grid;place-items:center;background:rgba(5,13,26,.8);border:2px dashed var(--holo);font:600 22px var(--display);letter-spacing:.1em;color:var(--holo);pointer-events:none}
+.hint{position:absolute;left:50%;transform:translateX(-50%);font:400 10px var(--mono);color:var(--ink3);bottom:100%;margin-bottom:6px;white-space:nowrap}
+.dockwrap{position:relative}
+@media (max-width:760px){
+  .mid{flex-direction:row;justify-content:flex-start;overflow-x:auto;align-items:flex-start;perspective:none;pointer-events:auto;scrollbar-width:none}
+  .col{flex-direction:row;width:auto;overflow:visible;flex:none}
+  .col.left,.col.right{transform:none !important}
+  .panel{width:236px;flex:none;backdrop-filter:none;background:rgba(8,26,48,.9)}
+  .kpi.wide b{font-size:24px}.kpi b{font-size:18px}
+  .mid{max-height:34vh}
+  .brand{font-size:16px}
+  .hint{display:none}
+}
+@media (prefers-reduced-motion:reduce){.row .bar i,.yr i,.col{transition:none}}
+</style>
+
+<canvas id="scene" aria-label="Mapa 3D de Lima con los proyectos del CODIP como columnas de luz"></canvas>
+
+<div class="hud">
+  <div class="top">
+    <div class="brand">Sala CODIP<small>Mercado inmobiliario de Lima · ventas por proyecto</small></div>
+    <span class="status" id="status">Cargando…</span>
+    <span class="spacer"></span>
+    <button class="btn" id="btnVoz" aria-pressed="false" title="Que ORBE responda en voz alta">Voz</button>
+    <button class="btn" id="btnCsv" title="Abre el CSV completo del CODIP. Se procesa en tu navegador, no se sube a ningún lado.">Cargar CSV completo</button>
+    <input type="file" id="file" accept=".csv,text/csv" hidden>
+  </div>
+
+  <div class="mid">
+    <div class="col left">
+      <section class="panel">
+        <h2>Lectura <span class="sub" id="scope">Toda la base</span></h2>
+        <div class="kpis">
+          <div class="kpi wide"><b id="kPm2">–</b><span>S/ por m² · mediana de venta</span></div>
+          <div class="kpi"><b id="kN">–</b><span>ventas</span></div>
+          <div class="kpi"><b id="kP">–</b><span>proyectos</span></div>
+          <div class="kpi"><b id="kT">–</b><span>ticket mediano</span></div>
+          <div class="kpi"><b id="kA">–</b><span>área mediana</span></div>
+        </div>
+      </section>
+      <section class="panel">
+        <h2><span id="rkTitle">Ranking</span>
+          <span class="seg" id="segDim">
+            <button data-dim="d" aria-pressed="true">Distr.</button>
+            <button data-dim="inm" aria-pressed="false">Inmob.</button>
+            <button data-dim="n" aria-pressed="false">Proy.</button>
+          </span>
+        </h2>
+        <div class="rows" id="rank"></div>
+      </section>
+    </div>
+
+    <div class="col right">
+      <section class="panel">
+        <h2><span id="yrTitle">Ventas por año</span>
+          <span class="seg" id="segMet">
+            <button data-met="ventas" aria-pressed="true">Ventas</button>
+            <button data-met="pm2" aria-pressed="false">S/ m²</button>
+            <button data-met="ticket" aria-pressed="false">Ticket</button>
+            <button data-met="area" aria-pressed="false">Área</button>
+          </span>
+        </h2>
+        <div class="years" id="years"></div>
+        <div class="yl" id="yl"></div>
+        <div class="note" id="yrNote"></div>
+      </section>
+      <section class="panel">
+        <h2>Dormitorios <span class="sub">% de ventas · S/ m²</span></h2>
+        <div class="rows" id="dorms"></div>
+      </section>
+      <section class="panel ficha" id="ficha" hidden>
+        <h2>Proyecto <button class="chip" id="fichaX" aria-label="Cerrar ficha">cerrar</button></h2>
+        <h3 id="fN"></h3>
+        <dl id="fD"></dl>
+      </section>
+      <section class="panel">
+        <h2>Mapa <span class="sub" id="lgTxt">altura: ventas</span></h2>
+        <div class="legend"><span id="lg0">–</span><i></i><span id="lg1">–</span></div>
+        <div class="note">Color: S/ por m² de venta (mediana del proyecto)</div>
+      </section>
+    </div>
+  </div>
+
+  <div class="dockwrap">
+    <div class="hint">Arrastra para girar · rueda para acercar · W A S D para caminar · clic en una columna para ver el proyecto</div>
+    <div class="dock">
+      <div class="say"><span class="who">ORBE</span><p id="say" aria-live="polite"></p></div>
+      <form class="cmd" id="cmd" autocomplete="off">
+        <input id="q" type="text" placeholder="Pídeme algo: “muéstrame Miraflores”, “compara Lince vs Jesús María”, “el más caro”…" aria-label="Orden para ORBE">
+        <button class="btn" type="button" id="btnMic" hidden aria-pressed="false">Hablar</button>
+        <button class="btn" type="submit">Enviar</button>
+      </form>
+      <div class="chips" id="chips"></div>
+    </div>
+  </div>
+</div>
+<div id="tip" hidden></div>
+<div id="drop" hidden>Suelta el CSV del CODIP</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script>
+(function(){
+"use strict";
+const $ = id => document.getElementById(id);
+const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+const norm = s => String(s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"").replace(/[^a-z0-9 ]+/g," ").replace(/\s+/g," ").trim();
+const median = a => { if(!a.length) return 0; const s=a.slice().sort((x,y)=>x-y), m=s.length>>1; return s.length%2 ? s[m] : (s[m-1]+s[m])/2; };
+const fmtN = n => Math.round(n).toLocaleString("es-PE");
+const fmtS = n => n ? "S/ "+fmtN(n) : "–";
+const fmtK = n => !n ? "–" : n>=1e6 ? "S/ "+(n/1e6).toFixed(2)+" M" : "S/ "+Math.round(n/1e3)+" k";
+const yearOf = s => new Date(Date.UTC(1899,11,30)+s*864e5).getUTCFullYear();
+const dateOf = s => { const d=new Date(Date.UTC(1899,11,30)+s*864e5); return ["ene","feb","mar","abr","may","jun","jul","ago","set","oct","nov","dic"][d.getUTCMonth()]+" "+d.getUTCFullYear(); };
+
+/* ---------- data ---------- */
+let P=[], U=[], UY=[];            // projects, units [pi, serial, dorms, area, pm2, price], unit years
+let isSample=true, maxSerial=0;
+const state={ f:{dist:null, inm:null, dorms:null, y0:null, y1:null}, metric:"ventas", dim:"d", sel:null };
+const MET={ ventas:{lb:"Ventas", unit:"ventas"}, pm2:{lb:"S/ m²"}, ticket:{lb:"Ticket"}, area:{lb:"Área"} };
+let A=null;                        // last aggregation
+
+function pass(i){
+  const u=U[i], p=P[u[0]], f=state.f;
+  if(f.dist && !f.dist.has(p.d)) return false;
+  if(f.inm && p.inm!==f.inm) return false;
+  if(f.dorms!=null && (f.dorms>=4 ? u[2]<4 : u[2]!==f.dorms)) return false;
+  if(f.y0!=null && UY[i]<f.y0) return false;
+  if(f.y1!=null && UY[i]>f.y1) return false;
+  return true;
+}
+function bucket(){ return {n:0, pm:[], tk:[], ar:[]}; }
+function push(b,u){ b.n++; if(u[4]>0) b.pm.push(u[4]); if(u[5]>0) b.tk.push(u[5]); if(u[3]>0) b.ar.push(u[3]); }
+function val(b,met){ return !b ? 0 : met==="ventas" ? b.n : met==="pm2" ? median(b.pm) : met==="ticket" ? median(b.tk) : median(b.ar); }
+function fmtMet(v,met){ return met==="ventas" ? fmtN(v) : met==="pm2" ? fmtS(v) : met==="ticket" ? fmtK(v) : v ? v.toFixed(0)+" m²" : "–"; }
+function aggregate(){
+  const all=bucket(), proj=new Map(), dist=new Map(), inm=new Map(), yr=new Map(), dm=new Map();
+  const add=(m,k,u)=>{ let b=m.get(k); if(!b) m.set(k,b=bucket()); push(b,u); };
+  for(let i=0;i<U.length;i++){ if(!pass(i)) continue; const u=U[i], p=P[u[0]];
+    push(all,u); add(proj,u[0],u); add(dist,p.d,u); add(inm,p.inm,u); add(yr,UY[i],u); add(dm,Math.min(u[2],4),u); }
+  A={all,proj,dist,inm,yr,dm}; return A;
+}
+
+/* ---------- 3D room ---------- */
+const canvas=$("scene");
+const renderer=new THREE.WebGLRenderer({canvas, antialias:true, alpha:false});
+renderer.setPixelRatio(Math.min(devicePixelRatio||1,2));
+renderer.setClearColor(0x050d1a,1);
+const scene=new THREE.Scene(); scene.fog=new THREE.FogExp2(0x050d1a,0.016);
+const camera=new THREE.PerspectiveCamera(50,1,0.1,400);
+const cam={ tx:0,tz:0, th:0.6, ph:0.95, r:26, gtx:0,gtz:0, gth:0.6, gph:0.95, gr:26, idle:0 };
+const HOLO=0x5fe3ff, AMBER=0xffb84a;
+
+// floor: grid + range rings (every 5 km)
+const grid=new THREE.GridHelper(80,80,0x1f6f9a,0x12385a); grid.material.transparent=true; grid.material.opacity=.55; scene.add(grid);
+for(const r of [5,10,15,20]){ const g=new THREE.RingGeometry(r-.02,r+.02,128); const m=new THREE.Mesh(g,new THREE.MeshBasicMaterial({color:HOLO,transparent:true,opacity:.22,side:THREE.DoubleSide})); m.rotation.x=-Math.PI/2; m.position.y=.01; scene.add(m); }
+// dust
+{ const n=700, pos=new Float32Array(n*3); for(let i=0;i<n;i++){ pos[i*3]=(Math.random()-.5)*70; pos[i*3+1]=Math.random()*16; pos[i*3+2]=(Math.random()-.5)*70; }
+  const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  scene.add(new THREE.Points(g,new THREE.PointsMaterial({color:0x7fdcff,size:.06,transparent:true,opacity:.5,blending:THREE.AdditiveBlending,depthWrite:false}))); }
+
+function textSprite(txt,color,size){
+  const c=document.createElement("canvas"); c.width=512; c.height=96; const x=c.getContext("2d");
+  x.font="600 "+(size||44)+"px 'Chakra Petch', system-ui, sans-serif"; x.textAlign="center"; x.textBaseline="middle";
+  x.shadowColor=color; x.shadowBlur=14; x.fillStyle=color; x.fillText(txt.toUpperCase(),256,48);
+  const t=new THREE.CanvasTexture(c); const s=new THREE.Sprite(new THREE.SpriteMaterial({map:t,transparent:true,depthTest:false,opacity:.85}));
+  s.scale.set(3.8,.71,1); return s;
+}
+{ const n=textSprite("N ↑","#9cc4d8",40); n.position.set(0,.4,-21.5); n.scale.set(3,.56,1); scene.add(n); }
+
+let cols=[], labels=[], geo0={lat:-12.1,lon:-77.03,k:1};
+const boxG=new THREE.BoxGeometry(.17,1,.17); boxG.translate(0,.5,0);
+const worldGroup=new THREE.Group(); scene.add(worldGroup);
+function xz(p){ return [ (p.lon-geo0.lon)*111.32*geo0.k, -(p.lat-geo0.lat)*110.57 ]; }
+function buildWorld(){
+  while(worldGroup.children.length) worldGroup.remove(worldGroup.children[0]);
+  cols=[]; labels=[];
+  const ok=P.filter(p=>p.lat&&p.lon);
+  geo0.lat=median(ok.map(p=>p.lat)); geo0.lon=median(ok.map(p=>p.lon)); geo0.k=Math.cos(geo0.lat*Math.PI/180);
+  P.forEach((p,i)=>{
+    const [x,z]=xz(p); p.x=Math.max(-38,Math.min(38,x)); p.z=Math.max(-38,Math.min(38,z));
+    const m=new THREE.Mesh(boxG,new THREE.MeshBasicMaterial({color:HOLO,transparent:true,opacity:.62,blending:THREE.AdditiveBlending,depthWrite:false}));
+    m.position.set(p.x,0,p.z); m.scale.y=.01; m.userData={i,h:.01,op:.62}; worldGroup.add(m); cols.push(m);
+  });
+  const byD=new Map(); P.forEach(p=>{ let a=byD.get(p.d); if(!a) byD.set(p.d,a=[]); a.push(p); });
+  byD.forEach((a,d)=>{ if(byD.size>30 && a.length<4) return;
+    const s=textSprite(d,"#bfefff"); s.position.set(median(a.map(p=>p.x)),0,median(a.map(p=>p.z))); s.userData={d,cx:s.position.x,cz:s.position.z}; worldGroup.add(s); labels.push(s); });
+}
+const lerpC=(a,b,t)=>a.clone().lerp(b,t);
+const C0=new THREE.Color(0x1d5fb0), C1=new THREE.Color(0x5fe3ff), C2=new THREE.Color(0xf2fbff);
+let pmLo=0, pmHi=1;
+function ramp(v){ const t=Math.max(0,Math.min(1,(v-pmLo)/(pmHi-pmLo||1))); return t<.5 ? lerpC(C0,C1,t*2) : lerpC(C1,C2,(t-.5)*2); }
+function updateWorld(){
+  const met=state.metric; let mx=0, mn=Infinity; A.proj.forEach(b=>{ const v=val(b,met); if(v>0){ mx=Math.max(mx,v); mn=Math.min(mn,v); } }); if(!(mx>mn)) mn=0;
+  const dTop=new Map();
+  cols.forEach(m=>{ const i=m.userData.i, b=A.proj.get(i), p=P[i];
+    if(!b){ m.userData.h=.04; m.userData.op=.07; m.material.color.setHex(0x2a7fb0); return; }
+    const v=val(b,met), h = met==="ventas" ? .25+Math.sqrt(v)*.62 : .35+Math.max(0,(v-mn)/((mx-mn)||1))*6;
+    m.userData.h=h; m.userData.op = state.sel===i ? 1 : .62;
+    m.material.color.copy(state.sel===i ? new THREE.Color(AMBER) : ramp(median(b.pm)));
+    dTop.set(p.d,Math.max(dTop.get(p.d)||0,h));
+  });
+  labels.forEach(s=>{ const on=dTop.has(s.userData.d); s.userData.y=(dTop.get(s.userData.d)||0)+1.1; s.material.opacity=on?.9:.18; });
+}
+
+// ORBE: the assistant's body
+const orb=new THREE.Group(); scene.add(orb);
+{ const n=800, pos=new Float32Array(n*3);
+  for(let i=0;i<n;i++){ const u=Math.random()*2-1, a=Math.random()*6.283, r=.42+Math.random()*.1, s=Math.sqrt(1-u*u); pos[i*3]=r*s*Math.cos(a); pos[i*3+1]=r*u; pos[i*3+2]=r*s*Math.sin(a); }
+  const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.BufferAttribute(pos,3));
+  orb.cloud=new THREE.Points(g,new THREE.PointsMaterial({color:0xaef3ff,size:.045,transparent:true,opacity:.95,blending:THREE.AdditiveBlending,depthWrite:false})); orb.add(orb.cloud);
+  orb.rings=[.72,.86].map((r,i)=>{ const m=new THREE.Mesh(new THREE.TorusGeometry(r,.009,6,90),new THREE.MeshBasicMaterial({color:i?AMBER:HOLO,transparent:true,opacity:.85})); m.rotation.x=1.2+i*.9; orb.add(m); return m; });
+  const c=document.createElement("canvas"); c.width=c.height=128; const x=c.getContext("2d"); const gr=x.createRadialGradient(64,64,0,64,64,64);
+  gr.addColorStop(0,"rgba(190,245,255,.9)"); gr.addColorStop(.3,"rgba(95,227,255,.35)"); gr.addColorStop(1,"rgba(95,227,255,0)"); x.fillStyle=gr; x.fillRect(0,0,128,128);
+  orb.glow=new THREE.Sprite(new THREE.SpriteMaterial({map:new THREE.CanvasTexture(c),transparent:true,blending:THREE.AdditiveBlending,depthWrite:false})); orb.glow.scale.set(2.6,2.6,1); orb.add(orb.glow);
+  orb.position.set(0,5,0); orb.goal=new THREE.Vector3(0,5,0); orb.busy=0; orb.talk=0;
+}
+const beams=[];
+for(let i=0;i<6;i++){ const g=new THREE.BufferGeometry(); g.setAttribute("position",new THREE.BufferAttribute(new Float32Array(6),3));
+  const l=new THREE.Line(g,new THREE.LineBasicMaterial({color:AMBER,transparent:true,opacity:0,blending:THREE.AdditiveBlending})); l.userData={to:null,life:0}; scene.add(l); beams.push(l); }
+function scan(projIdx){ beams.forEach((b,i)=>{ b.userData.to = projIdx[i]!=null ? cols[projIdx[i]] : null; b.userData.life = b.userData.to ? 3.2 : 0; }); }
+
+function resize(){ const w=canvas.clientWidth, h=canvas.clientHeight; renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+addEventListener("resize",resize);
+
+// camera: orbit / pan / zoom / walk
+const keys=new Set(); let drag=null, moved=0, pinch=0; const ptrs=new Map();
+canvas.addEventListener("pointerdown",e=>{ canvas.setPointerCapture(e.pointerId); ptrs.set(e.pointerId,[e.clientX,e.clientY]); drag={x:e.clientX,y:e.clientY,pan:e.button===2||e.shiftKey}; moved=0; cam.idle=0; canvas.classList.add("drag");
+  if(ptrs.size===2){ const [a,b]=[...ptrs.values()]; pinch=Math.hypot(a[0]-b[0],a[1]-b[1]); } });
+canvas.addEventListener("pointermove",e=>{
+  if(ptrs.has(e.pointerId)) ptrs.set(e.pointerId,[e.clientX,e.clientY]);
+  if(ptrs.size===2){ const [a,b]=[...ptrs.values()], d=Math.hypot(a[0]-b[0],a[1]-b[1]); if(pinch) cam.gr=Math.max(4,Math.min(70,cam.gr*pinch/d)); pinch=d; moved=9; return; }
+  if(drag){ const dx=e.clientX-drag.x, dy=e.clientY-drag.y; moved+=Math.abs(dx)+Math.abs(dy); drag.x=e.clientX; drag.y=e.clientY; cam.idle=0;
+    if(drag.pan){ const k=cam.r*.0016; cam.gtx-=(Math.cos(cam.th)*dx+Math.sin(cam.th)*dy)*k; cam.gtz-=(-Math.sin(cam.th)*dx+Math.cos(cam.th)*dy)*k; }
+    else { cam.gth-=dx*.005; cam.gph=Math.max(.15,Math.min(1.5,cam.gph-dy*.004)); } }
+  else hover(e);
+});
+const endPtr=e=>{ ptrs.delete(e.pointerId); pinch=0; canvas.classList.remove("drag"); if(drag && moved<5) click(e); drag=null; };
+canvas.addEventListener("pointerup",endPtr); canvas.addEventListener("pointercancel",e=>{ ptrs.delete(e.pointerId); drag=null; });
+canvas.addEventListener("pointerleave",()=>{ $("tip").hidden=true; });
+canvas.addEventListener("contextmenu",e=>e.preventDefault());
+canvas.addEventListener("wheel",e=>{ e.preventDefault(); cam.gr=Math.max(4,Math.min(70,cam.gr*(1+Math.sign(e.deltaY)*.1))); cam.idle=0; },{passive:false});
+addEventListener("keydown",e=>{ if(e.target.tagName==="INPUT") return; keys.add(e.key.toLowerCase()); });
+addEventListener("keyup",e=>keys.delete(e.key.toLowerCase()));
+function flyTo(x,z,r){ cam.gtx=x; cam.gtz=z; if(r) cam.gr=r; cam.idle=0; }
+
+const ray=new THREE.Raycaster(), v2=new THREE.Vector2();
+function pick(e){ const r=canvas.getBoundingClientRect(); v2.set(((e.clientX-r.left)/r.width)*2-1, -((e.clientY-r.top)/r.height)*2+1); ray.setFromCamera(v2,camera);
+  const hit=ray.intersectObjects(cols.filter(m=>A.proj.has(m.userData.i)),false)[0]; return hit ? hit.object.userData.i : null; }
+function hover(e){ const i=pick(e), t=$("tip"); if(i==null){ t.hidden=true; return; }
+  const p=P[i], b=A.proj.get(i); t.innerHTML=""; const h=document.createElement("b"); h.textContent=p.n; t.appendChild(h);
+  t.appendChild(document.createTextNode(p.d+" · "+p.inm)); t.appendChild(document.createElement("br"));
+  t.appendChild(document.createTextNode(fmtN(b.n)+" ventas · "+fmtS(median(b.pm))+"/m²"));
+  t.hidden=false; t.style.left=Math.min(innerWidth-250,e.clientX+14)+"px"; t.style.top=(e.clientY+14)+"px"; }
+function click(e){ const i=pick(e); if(i!=null) select(i,true); }
+
+let last=performance.now();
+function tick(now){
+  const dt=Math.min(.05,(now-last)/1000); last=now; const T=now/1000;
+  const sp=cam.r*.6*dt, fx=-Math.sin(cam.th), fz=-Math.cos(cam.th);
+  if(keys.has("w")||keys.has("arrowup")){ cam.gtx+=fx*sp; cam.gtz+=fz*sp; cam.idle=0; }
+  if(keys.has("s")||keys.has("arrowdown")){ cam.gtx-=fx*sp; cam.gtz-=fz*sp; cam.idle=0; }
+  if(keys.has("a")||keys.has("arrowleft")){ cam.gtx+=fz*sp; cam.gtz-=fx*sp; cam.idle=0; }
+  if(keys.has("d")||keys.has("arrowright")){ cam.gtx-=fz*sp; cam.gtz+=fx*sp; cam.idle=0; }
+  cam.idle+=dt; if(!reduce && cam.idle>6) cam.gth+=dt*.03;
+  const k=reduce?1:1-Math.pow(.002,dt);
+  cam.tx+=(cam.gtx-cam.tx)*k; cam.tz+=(cam.gtz-cam.tz)*k; cam.th+=(cam.gth-cam.th)*k; cam.ph+=(cam.gph-cam.ph)*k; cam.r+=(cam.gr-cam.r)*k;
+  camera.position.set(cam.tx+cam.r*Math.sin(cam.ph)*Math.sin(cam.th), cam.r*Math.cos(cam.ph), cam.tz+cam.r*Math.sin(cam.ph)*Math.cos(cam.th));
+  camera.lookAt(cam.tx,2,cam.tz);
+  for(const m of cols){ m.scale.y+=(m.userData.h-m.scale.y)*k; m.material.opacity+=(m.userData.op-m.material.opacity)*k; }
+  for(const s of labels){ s.position.y+=((s.userData.y||1)-s.position.y)*k; }
+  orb.busy=Math.max(0,orb.busy-dt); orb.talk=Math.max(0,orb.talk-dt);
+  const spin=orb.busy>0?4:.6;
+  orb.position.lerp(orb.goal,reduce?1:1-Math.pow(.02,dt)); if(!reduce) orb.position.y+=Math.sin(T*1.4)*.004;
+  orb.cloud.rotation.y+=dt*spin*.5; orb.rings[0].rotation.z+=dt*spin; orb.rings[1].rotation.z-=dt*spin*.7; orb.rings[1].rotation.x+=dt*.3;
+  const pulse=1+(orb.talk>0?Math.sin(T*14)*.12:0)+(orb.busy>0?.18:0); orb.cloud.scale.setScalar(pulse); orb.glow.scale.setScalar(2.6*pulse);
+  for(const b of beams){ const u=b.userData; u.life=Math.max(0,u.life-dt); b.material.opacity=Math.min(.8,u.life*.6);
+    if(u.to && u.life>0){ const a=b.geometry.attributes.position.array; a[0]=orb.position.x;a[1]=orb.position.y;a[2]=orb.position.z; a[3]=u.to.position.x;a[4]=u.to.scale.y;a[5]=u.to.position.z; b.geometry.attributes.position.needsUpdate=true; } }
+  // side panels lean with the camera, like sheets of light hanging in the room
+  const lean=Math.sin(cam.th)*3; if(innerWidth>760) document.querySelector(".col.left").style.setProperty("transform","rotateY("+(9+lean)+"deg)"); if(innerWidth>760) document.querySelector(".col.right").style.setProperty("transform","rotateY("+(-9+lean)+"deg)");
+  renderer.render(scene,camera);
+  requestAnimationFrame(tick);
+}
+
+/* ---------- panels ---------- */
+function scopeText(){ const f=state.f, a=[];
+  if(f.dist) a.push([...f.dist].join(" + ")); if(f.inm) a.push(f.inm); if(f.dorms!=null) a.push(f.dorms>=4?"4+ dorm.":f.dorms+" dorm.");
+  if(f.y0!=null||f.y1!=null) a.push(f.y0===f.y1?String(f.y0):(f.y0||"…")+"–"+(f.y1||"…"));
+  return a.length?a.join(" · "):"Toda la base"; }
+function setPressed(seg,attr,v){ seg.querySelectorAll("button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset[attr]===v))); }
+function rankList(dim,met,minN){
+  const src = dim==="d"?A.dist : dim==="inm"?A.inm : A.proj, out=[];
+  src.forEach((b,k)=>{ if(met!=="ventas" && b.n<minN) return; out.push({k, name: dim==="n"?P[k].n:k, v:val(b,met), n:b.n}); });
+  return out.sort((a,b)=>b.v-a.v);
+}
+function minN(){ return A.all.n>400?5:A.all.n>60?3:1; }
+function row(name,vl,w,on,fn,title){ const b=document.createElement("button"); b.className="row"+(on?" on":""); b.type="button"; b.title=title||name;
+  const n=document.createElement("span"); n.className="nm"; n.textContent=name; const v=document.createElement("span"); v.className="vl"; v.textContent=vl;
+  const bar=document.createElement("span"); bar.className="bar"; const i=document.createElement("i"); i.style.width=Math.max(1,w*100)+"%"; bar.appendChild(i);
+  b.append(n,v,bar); if(fn) b.addEventListener("click",fn); return b; }
+function render(){
+  aggregate();
+  const pms=[]; A.proj.forEach(b=>{ if(b.pm.length) pms.push(median(b.pm)); }); pms.sort((a,b)=>a-b);
+  if(pms.length){ pmLo=pms[Math.floor(pms.length*.05)]; pmHi=pms[Math.min(pms.length-1,Math.floor(pms.length*.95))]; }
+  updateWorld();
+  const a=A.all, met=state.metric;
+  $("scope").textContent=scopeText();
+  $("kPm2").textContent=fmtS(median(a.pm)); $("kN").textContent=fmtN(a.n); $("kP").textContent=fmtN(A.proj.size);
+  $("kT").textContent=fmtK(median(a.tk)); $("kA").textContent=a.ar.length?median(a.ar).toFixed(0)+" m²":"–";
+  $("lg0").textContent=fmtS(pmLo); $("lg1").textContent=fmtS(pmHi); $("lgTxt").textContent="altura: "+MET[met].lb.toLowerCase();
+  // ranking
+  const dimLb={d:"distritos",inm:"inmobiliarias",n:"proyectos"}[state.dim];
+  $("rkTitle").textContent=MET[met].lb+" · "+dimLb;
+  const rk=rankList(state.dim,met,minN()).slice(0,8), mx=rk.length?rk[0].v:1, R=$("rank"); R.innerHTML="";
+  rk.forEach(r=>{ const on = state.dim==="d" ? !!(state.f.dist&&state.f.dist.has(r.k)) : state.dim==="inm" ? state.f.inm===r.k : state.sel===r.k;
+    R.appendChild(row(r.name,fmtMet(r.v,met),r.v/mx,on,()=>{ if(state.dim==="d") run("distrito "+r.k,true); else if(state.dim==="inm") { state.f.inm = state.f.inm===r.k?null:r.k; render(); focusFilter(); } else select(r.k,true); },
+      r.name+" · "+fmtN(r.n)+" ventas")); });
+  if(!rk.length) R.textContent="Sin ventas con este filtro.";
+  // years
+  const ys=[...new Set(UY)].sort(); const Y=$("years"), YL=$("yl"); Y.innerHTML=""; YL.innerHTML="";
+  const vals=ys.map(y=>val(A.yr.get(y),met)), ymx=Math.max(1,...vals), lastY=ys[ys.length-1];
+  $("yrTitle").textContent=(met==="ventas"?"Ventas":MET[met].lb+" (mediana)")+" por año";
+  ys.forEach((y,i)=>{ const d=document.createElement("div"); d.className="yr"+(y===lastY&&met==="ventas"?" part":""); d.title=y+": "+fmtMet(vals[i],met)+(A.yr.get(y)?" · "+fmtN(A.yr.get(y).n)+" ventas":"");
+    const em=document.createElement("em"); em.textContent = met==="ventas"?fmtN(vals[i]) : met==="pm2"?(vals[i]/1e3).toFixed(1)+"k" : met==="ticket"?Math.round(vals[i]/1e3)+"k" : vals[i].toFixed(0);
+    const bar=document.createElement("i"); bar.style.height=(vals[i]/ymx*100)+"%"; d.append(em,bar); Y.appendChild(d);
+    const s=document.createElement("span"); s.textContent="’"+String(y).slice(2); YL.appendChild(s); });
+  $("yrNote").textContent = met==="ventas" ? lastY+" es parcial: la base llega a "+dateOf(maxSerial)+"." : "";
+  // dorms
+  const D=$("dorms"); D.innerHTML="";
+  [1,2,3,4].forEach(k=>{ const b=A.dm.get(k); if(!b) return; const sh=b.n/(a.n||1);
+    D.appendChild(row((k===4?"4+":k)+" dorm.",Math.round(sh*100)+"% · "+fmtS(median(b.pm)),sh,state.f.dorms===k,()=>{ state.f.dorms = state.f.dorms===k?null:k; render(); },fmtN(b.n)+" ventas")); });
+  renderFicha(); renderChips();
+}
+function renderFicha(){ const F=$("ficha"); if(state.sel==null){ F.hidden=true; return; }
+  const p=P[state.sel], b=A.proj.get(state.sel)||bucket(); F.hidden=false; $("fN").textContent=p.n; const D=$("fD"); D.innerHTML="";
+  [["Inmobiliaria",p.inm],["Distrito",p.d+(p.s?" · "+p.s:"")],["Fase",p.fase||"–"],["NSE",p.nse||"–"],["Inicio de venta",p.ini?dateOf(p.ini):"–"],["Unidades totales",p.ut?fmtN(p.ut):"–"],
+   ["Ventas (filtro actual)",fmtN(b.n)],["S/ m² mediana",fmtS(median(b.pm))],["Ticket mediano",fmtK(median(b.tk))],["Área mediana",b.ar.length?median(b.ar).toFixed(0)+" m²":"–"]]
+   .forEach(([k,v])=>{ const dt=document.createElement("dt"); dt.textContent=k; const dd=document.createElement("dd"); dd.textContent=v; D.append(dt,dd); }); }
+const EXAMPLES=["Muéstrame Miraflores","Compara Lince vs Jesús María","El proyecto más caro","Top inmobiliarias","Solo 2 dormitorios","Ventas de 2025","Altura por precio","Vista general"];
+function renderChips(){ const C=$("chips"); C.innerHTML=""; const f=state.f;
+  const add=(t,cls,fn)=>{ const b=document.createElement("button"); b.type="button"; b.className="chip "+cls; b.textContent=t; b.addEventListener("click",fn); C.appendChild(b); };
+  if(f.dist) add("× "+[...f.dist].join(" + "),"f",()=>{ f.dist=null; render(); focusFilter(); });
+  if(f.inm) add("× "+f.inm,"f",()=>{ f.inm=null; render(); focusFilter(); });
+  if(f.dorms!=null) add("× "+(f.dorms>=4?"4+":f.dorms)+" dorm.","f",()=>{ f.dorms=null; render(); });
+  if(f.y0!=null||f.y1!=null) add("× "+(f.y0===f.y1?f.y0:(f.y0||"…")+"–"+(f.y1||"…")),"f",()=>{ f.y0=f.y1=null; render(); });
+  EXAMPLES.forEach(t=>add(t,"",()=>run(t))); }
+
+/* ---------- ORBE: understanding and doing ---------- */
+function focusFilter(){ // move camera and ORBE over whatever is in scope, and scan its top projects
+  const ids=[...A.proj.keys()]; if(!ids.length) return;
+  const xs=ids.map(i=>P[i].x), zs=ids.map(i=>P[i].z), cx=median(xs), cz=median(zs);
+  const spread=Math.max(Math.max(...xs)-Math.min(...xs),Math.max(...zs)-Math.min(...zs));
+  const filtered = state.f.dist||state.f.inm;
+  flyTo(filtered?cx:0, filtered?cz:0, Math.max(7,Math.min(30,spread*1.5+5)));
+  orb.goal.set(cx,filtered?4.2:5.5,cz); orb.busy=1.4;
+  scan(ids.sort((a,b)=>A.proj.get(b).n-A.proj.get(a).n).slice(0,filtered?5:0));
+}
+function select(i,talk){ state.sel=i; const p=P[i]; render(); flyTo(p.x,p.z,Math.min(cam.gr,13)); orb.goal.set(p.x,cols[i].userData.h+1.6,p.z); orb.busy=1; scan([i]);
+  if(talk){ const b=A.proj.get(i); say(p.n+", de "+p.inm+", en "+p.d+". "+(b?fmtN(b.n)+" ventas en el filtro actual, a "+fmtS(median(b.pm))+" por metro cuadrado de mediana.":"Sin ventas en el filtro actual.")); } }
+
+let IDX={d:[],inm:[],n:[]};
+function buildIndex(){
+  const stop=/\b(inmobiliaria|inmobiliario|grupo|asociados|constructora|sac|del|de|la|el|los|las)\b/g;
+  const dset=[...new Set(P.map(p=>p.d))], iset=[...new Set(P.map(p=>p.inm))];
+  IDX.d=dset.map(d=>{ const n=norm(d), w=n.split(" "), al=[n]; if(w.length>1){ const lastW=w[w.length-1]; if(lastW.length>4 && dset.filter(x=>norm(x).endsWith(lastW)).length===1) al.push(lastW); } return {k:d,al}; });
+  IDX.inm=iset.map(k=>({k,al:[norm(k),norm(k).replace(stop,"").replace(/\s+/g," ").trim()].filter(a=>a.length>=4)}));
+  IDX.n=P.map((p,i)=>({k:i,al:[norm(p.n)].filter(a=>a.length>=5)}));
+}
+function findAll(list,t){ const out=[]; for(const e of list){ let pos=-1; for(const a of e.al){ const m=(" "+t+" ").indexOf(" "+a+" "); if(m>=0){ pos=m; break; } } if(pos>=0) out.push({k:e.k,pos}); } return out.sort((a,b)=>a.pos-b.pos); }
+function statLine(name,b){ return name+": "+fmtN(b.n)+" ventas, "+fmtS(median(b.pm))+" por m², ticket "+fmtK(median(b.tk))+", "+(b.ar.length?median(b.ar).toFixed(0):"–")+" m²"; }
+
+function rules(text){
+  const t=norm(text), f=state.f; let did=false; const said=[];
+  if(/\b(ayuda|que puedes|que sabes)\b/.test(t)) return "Puedo filtrar por distrito, inmobiliaria, dormitorios o años; comparar dos distritos; buscar el proyecto más caro, más barato o más vendido; armar rankings; y cambiar qué mide la altura de las columnas. Por ejemplo: “compara Surco vs San Borja en 2025”.";
+  if(/\b(vista general|reinicia|reset|limpia|quita (los )?filtros|toda lima|todo el mercado|inicio)\b/.test(t)){ f.dist=f.inm=f.dorms=f.y0=f.y1=null; state.sel=null; state.metric="ventas"; state.dim="d"; setPressed($("segMet"),"met","ventas"); setPressed($("segDim"),"dim","d"); render(); focusFilter();
+    return "Vista general. "+fmtN(A.all.n)+" ventas en "+fmtN(A.proj.size)+" proyectos, con una mediana de "+fmtS(median(A.all.pm))+" por metro cuadrado."; }
+  // metric
+  let met=null;
+  if(/\b(precio|m2|metro cuadrado|caro|barato)\b/.test(t)) met="pm2"; else if(/\bticket\b/.test(t)) met="ticket"; else if(/\b(area|areas|metraje|tamano)\b/.test(t)) met="area"; else if(/\b(ventas|vendido|vendidos|unidades|velocidad)\b/.test(t)) met="ventas";
+  // filters
+  const ds=findAll(IDX.d,t), ins=findAll(IDX.inm,t), cmp=/\b(vs|versus|contra|compara|comparar|comparame)\b/.test(t);
+  const ym=[...t.matchAll(/\b(20[1-3]\d)\b/g)].map(m=>+m[1]);
+  if(ym.length){ if(ym.length>=2){ f.y0=Math.min(...ym); f.y1=Math.max(...ym); } else if(/\bdesde\b/.test(t)){ f.y0=ym[0]; f.y1=null; } else if(/\bhasta\b/.test(t)){ f.y1=ym[0]; f.y0=null; } else f.y0=f.y1=ym[0]; did=true; }
+  const dm=t.match(/\b([1-5]) ?(d|dorm|dorms|dormitorio|dormitorios|habitaciones)\b/); if(dm){ f.dorms=Math.min(4,+dm[1]); did=true; }
+  if(ins.length){ f.inm=ins[0].k; did=true; }
+  if(ds.length){ f.dist=new Set(ds.slice(0,cmp?4:1).map(d=>d.k)); did=true; }
+  else if(/\b(toda lima|todos los distritos)\b/.test(t)){ f.dist=null; did=true; }
+  if(did) state.sel=null;
+  // ranking dimension
+  const top=/\b(top|ranking|mejores|principales|lideres)\b/.test(t);
+  let dim=null; if(/\binmobiliarias|desarrolladoras|empresas\b/.test(t)) dim="inm"; else if(/\bproyectos\b/.test(t)) dim="n"; else if(/\bdistritos|zonas\b/.test(t)) dim="d";
+  if(dim){ state.dim=dim; setPressed($("segDim"),"dim",dim); did=true; }
+  const sup = /\bmas (caro|costoso)\b/.test(t) ? ["pm2",1] : /\bmas (barato|economico)\b/.test(t) ? ["pm2",-1] : /\bmas vendid[oa]s?\b|\bque mas vende\b|\blider\b/.test(t) ? ["ventas",1] : null;
+  if(met && (top||dim||/\b(altura|por|muestra|ver|mide|cambia)\b/.test(t)||sup)){ state.metric=sup?sup[0]:met; setPressed($("segMet"),"met",state.metric); did=true; }
+  if(!did && !sup) return null;
+  render();
+  if(!A.all.n){ return "No hay ventas con ese filtro ("+scopeText()+"). Prueba ampliar los años o quitar un filtro."; }
+  if(sup){
+    const what = dim==="inm"?"inm": dim==="d"?"d":"n";
+    const list=rankList(what,sup[0],minN()); if(sup[1]<0) list.reverse(); const r=list[0];
+    if(r){ if(what==="n"){ select(r.k,false); } else focusFilter();
+      return (what==="n"?"El proyecto":what==="inm"?"La inmobiliaria":"El distrito")+" "+(sup[0]==="ventas"?"con más ventas":sup[1]>0?"más caro":"más barato")+" en "+scopeText()+" es "+r.name+": "+fmtMet(r.v,sup[0])+(sup[0]==="pm2"?" por m²":" ventas")+" ("+fmtN(r.n)+" ventas"+(sup[0]==="pm2"&&minN()>1?", entre los que tienen al menos "+minN():"")+")."; }
+  }
+  focusFilter();
+  if(cmp && f.dist && f.dist.size>1){ const parts=[...f.dist].map(d=>A.dist.get(d)?statLine(d,A.dist.get(d)):d+": sin ventas");
+    const two=[...f.dist].map(d=>A.dist.get(d)).filter(Boolean); if(two.length===2){ const a=median(two[0].pm), b=median(two[1].pm); parts.push("Diferencia de precio: "+(a>b?"+":"")+((a/b-1)*100).toFixed(1)+"% el primero sobre el segundo"); }
+    return parts.join(". ")+"."; }
+  if(top||dim){ const rk=rankList(state.dim,state.metric,minN()).slice(0,5); return "Top "+rk.length+" "+({d:"distritos",inm:"inmobiliarias",n:"proyectos"}[state.dim])+" por "+MET[state.metric].lb.toLowerCase()+" en "+scopeText()+": "+rk.map((r,i)=>(i+1)+") "+r.name+", "+fmtMet(r.v,state.metric)).join("; ")+"."; }
+  if(met && !ds.length && !ins.length && !ym.length && !dm) return "Listo. La altura de las columnas ahora mide "+MET[state.metric].lb.toLowerCase()+"; el color sigue siendo el precio por m².";
+  const lead=rankList("n","ventas",1)[0];
+  return statLine(scopeText(),A.all)+", en "+fmtN(A.proj.size)+" proyectos."+(lead?" El que más vende es "+lead.name+" con "+fmtN(lead.n)+".":"");
+}
+
+let sample=null, tts=null, dict=null, voice=false, busy=false;
+async function askClaude(text){
+  const dist=rankList("d","ventas",1).slice(0,25).map(r=>r.name+"|"+r.n+"|"+Math.round(median(A.dist.get(r.k).pm))).join("\n");
+  const inm=rankList("inm","ventas",1).slice(0,25).map(r=>r.name+"|"+r.n+"|"+Math.round(median(A.inm.get(r.k).pm))).join("\n");
+  const yrs=[...A.yr.keys()].sort().map(y=>y+"|"+A.yr.get(y).n+"|"+Math.round(median(A.yr.get(y).pm))).join("\n");
+  const prompt="Eres ORBE, el asistente de una sala de datos del mercado inmobiliario de Lima (base CODIP: ventas de departamentos por proyecto). Respondes en español, breve y directo, y puedes mover la visualización con acciones.\n"+
+  (isSample?"AVISO: la base cargada es una muestra parcial y no representativa del mercado; dilo si das conclusiones de mercado.\n":"")+
+  "Filtro actual: "+scopeText()+". Totales del filtro: "+statLine("total",A.all)+", "+A.proj.size+" proyectos.\n"+
+  "Distritos (nombre|ventas|S/ m2 mediana):\n"+dist+"\nInmobiliarias (nombre|ventas|S/ m2 mediana):\n"+inm+"\nAños (año|ventas|S/ m2 mediana):\n"+yrs+"\n\n"+
+  "Usa solo estas cifras; no inventes números. Devuelve SOLO un JSON: {\"say\": string (máx. 70 palabras), \"actions\": [ ... ]}. Acciones posibles, todas opcionales:\n"+
+  "{\"type\":\"filter\",\"distritos\":[nombres exactos],\"inmobiliaria\":nombre exacto,\"dorms\":1-4,\"y0\":año,\"y1\":año}\n{\"type\":\"metric\",\"metric\":\"ventas\"|\"pm2\"|\"ticket\"|\"area\"}\n{\"type\":\"rank\",\"dim\":\"d\"|\"inm\"|\"n\"}\n{\"type\":\"reset\"}\n\nPedido del usuario: "+text;
+  const r=await sample.json(prompt,{modelTier:"quick",cache:false});
+  const f=state.f;
+  for(const a of (r&&Array.isArray(r.actions)?r.actions:[])){
+    if(a.type==="reset"){ f.dist=f.inm=f.dorms=f.y0=f.y1=null; state.sel=null; }
+    if(a.type==="filter"){ if(Array.isArray(a.distritos)){ const ok=a.distritos.filter(d=>P.some(p=>p.d===d)); f.dist=ok.length?new Set(ok):null; }
+      if(typeof a.inmobiliaria==="string" && P.some(p=>p.inm===a.inmobiliaria)) f.inm=a.inmobiliaria;
+      if(a.dorms>=1&&a.dorms<=4) f.dorms=a.dorms|0; if(a.y0>2000) f.y0=a.y0|0; if(a.y1>2000) f.y1=a.y1|0; }
+    if(a.type==="metric" && MET[a.metric]){ state.metric=a.metric; setPressed($("segMet"),"met",a.metric); }
+    if(a.type==="rank" && ["d","inm","n"].includes(a.dim)){ state.dim=a.dim; setPressed($("segDim"),"dim",a.dim); }
+  }
+  render(); focusFilter();
+  return r&&typeof r.say==="string"&&r.say ? r.say : "Hecho.";
+}
+let typer=0;
+function say(text){
+  const el=$("say"); clearInterval(typer); orb.talk=Math.min(9,2+text.length*.05);
+  if(reduce){ el.textContent=text; } else { let i=0; el.textContent=""; typer=setInterval(()=>{ i+=3; el.textContent=text.slice(0,i); if(i>=text.length) clearInterval(typer); },16); }
+  if(voice){ const spoken=text.replace(/S\/ /g,"").slice(0,1900);
+    if(tts) tts.speak(spoken,{language:"es"}).catch(()=>{});
+    else try{ const u=new SpeechSynthesisUtterance(spoken); u.lang="es-PE"; speechSynthesis.cancel(); speechSynthesis.speak(u); }catch(e){} }
+}
+async function run(text,quiet){
+  text=String(text||"").trim(); if(!text||busy) return; orb.busy=1.2;
+  let ans=rules(text);
+  if(ans==null){
+    if(sample){ busy=true; orb.busy=30; $("say").textContent="Analizando…";
+      try{ ans=await askClaude(text); }catch(e){ ans = e&&e.code==="rate_limited" ? "Estoy recibiendo demasiados pedidos. Dame un momento y vuelve a intentar." : null; }
+      busy=false; orb.busy=.5; }
+    if(ans==null) ans="No entendí ese pedido. Prueba con un distrito, una inmobiliaria, un año o “top proyectos por precio”. Escribe “ayuda” para ver más.";
+  }
+  if(!quiet||ans) say(ans);
+}
+$("cmd").addEventListener("submit",e=>{ e.preventDefault(); const q=$("q"); run(q.value); q.value=""; });
+$("segMet").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; state.metric=b.dataset.met; setPressed($("segMet"),"met",state.metric); render(); });
+$("segDim").addEventListener("click",e=>{ const b=e.target.closest("button"); if(!b) return; state.dim=b.dataset.dim; setPressed($("segDim"),"dim",state.dim); render(); });
+$("fichaX").addEventListener("click",()=>{ state.sel=null; render(); });
+$("btnVoz").addEventListener("click",()=>{ voice=!voice; $("btnVoz").setAttribute("aria-pressed",String(voice)); if(voice) say("Voz activada. Te escucho."); else { if(tts) tts.stop(); else try{ speechSynthesis.cancel(); }catch(e){} } });
+$("btnMic").addEventListener("click",()=>{ if(!dict) return; const on=$("btnMic").getAttribute("aria-pressed")==="true";
+  if(on) dict.stop().catch(()=>{}); else dict.start({language:"es"}).catch(err=>{ if(err&&err.code==="not_granted") $("btnMic").hidden=true; }); });
+(async()=>{ const use=window.claude&&window.claude.use; if(!use) return;
+  window.claude.use("sample").then(s=>{ sample=s; });
+  window.claude.use("tts").then(t=>{ tts=t; });
+  window.claude.use("dictation").then(d=>{ if(!d) return; dict=d; $("btnMic").hidden=false;
+    d.onPartial(({text})=>{ $("q").value=text; }); d.onFinal(({text})=>{ $("q").value=""; run(text); });
+    d.onState(({state:s})=>{ const on=s==="listening"||s==="starting"; $("btnMic").setAttribute("aria-pressed",String(on)); $("btnMic").textContent=on?"Escuchando…":"Hablar"; }); });
+})();
+
+/* ---------- loading data ---------- */
+function setData(projects,units,sampleFlag,label){
+  P=projects; U=units; UY=U.map(u=>yearOf(u[1])); maxSerial=U.reduce((m,u)=>Math.max(m,u[1]),0); isSample=sampleFlag;
+  state.f={dist:null,inm:null,dorms:null,y0:null,y1:null}; state.sel=null;
+  const st=$("status"); st.textContent=label; st.classList.toggle("full",!sampleFlag);
+  buildWorld(); buildIndex(); render(); focusFilter();
+}
+function num(x){ if(typeof x==="number") return x; x=String(x==null?"":x).trim(); if(!x) return 0; if(/^-?\d{1,3}(\.\d{3})+(,\d+)?$/.test(x)) x=x.replace(/\./g,"").replace(",","."); else if(/^-?\d+,\d+$/.test(x)) x=x.replace(",","."); else x=x.replace(/,(?=\d{3}\b)/g,""); const v=parseFloat(x); return isFinite(v)?v:0; }
+function serial(x){ const s=String(x==null?"":x).trim(); if(/^\d{5}(\.\d+)?$/.test(s)) return Math.floor(+s);
+  let m=s.match(/^(\d{1,2})[\/-](\d{1,2})[\/-](\d{4})/), d=null; if(m) d=Date.UTC(+m[3],+m[2]-1,+m[1]); else { m=s.match(/^(\d{4})-(\d{2})-(\d{2})/); if(m) d=Date.UTC(+m[1],+m[2]-1,+m[3]); }
+  return d==null?0:Math.round((d-Date.UTC(1899,11,30))/864e5); }
+function loadCsv(file){
+  const st=$("status"); st.textContent="Leyendo "+file.name+"…"; let H=null, rows=0, bad=0; const projects=[], idx=new Map(), units=[];
+  const col=(row,...names)=>{ for(const n of names){ const k=H[norm(n)]; if(k!=null && row[k]!==undefined) return row[k]; } return ""; };
+  Papa.parse(file,{header:true,skipEmptyLines:true,chunk(res){
+      if(!H){ H={}; (res.meta.fields||[]).forEach(f=>{ H[norm(f)]=f; }); }
+      for(const row of res.data){ rows++;
+        const key=String(col(row,"Id_Proyecto","Nemonico-Proyecto","Nombre de Proyecto")).trim(), sv=serial(col(row,"Fecha de Venta"));
+        if(!key||!sv){ bad++; continue; }
+        let pi=idx.get(key);
+        if(pi==null){ pi=projects.length; idx.set(key,pi); projects.push({n:String(col(row,"Nombre de Proyecto")).trim()||key, inm:String(col(row,"Inmobiliaria")).trim()||"Sin dato",
+          d:String(col(row,"Distrito")).trim().toLowerCase().replace(/(^|\s)\S/g,c=>c.toUpperCase())||"Sin dato", s:String(col(row,"Sector")).trim(), lat:num(col(row,"Latitud")), lon:num(col(row,"Longitud")),
+          fase:String(col(row,"Fase de Proyecto")).trim(), nse:String(col(row,"NSE")).trim(), ut:Math.round(num(col(row,"Cantidad de Unidades Totales"))), ini:serial(col(row,"Fecha de Inicio de Venta"))}); }
+        units.push([pi,sv,Math.round(num(col(row,"Dormitorios","Cantidad de Dormitorios"))),num(col(row,"Área Total","Area Total")),Math.round(num(col(row,"Precio por m2 - Venta Solarizado","Precio de Venta x m2 S/."))),Math.round(num(col(row,"Precio de Venta Solarizado Neto","Precio de Venta")))]);
+      }
+      st.textContent="Leyendo… "+fmtN(rows)+" filas";
+    },
+    complete(){ if(!units.length){ st.textContent="No encontré ventas en ese archivo"; say("No pude leer ventas en ese archivo. Necesito el CSV del CODIP con sus columnas originales, como Id_Proyecto, Fecha de Venta, Distrito, Latitud y Longitud."); return; }
+      setData(projects,units,false,"Archivo completo · "+fmtN(units.length)+" ventas · "+fmtN(projects.length)+" proyectos");
+      say("Base cargada: "+fmtN(units.length)+" ventas en "+fmtN(projects.length)+" proyectos, hasta "+dateOf(maxSerial)+"."+(bad?" Dejé fuera "+fmtN(bad)+" filas sin proyecto o sin fecha de venta.":"")); },
+    error(){ st.textContent="No se pudo leer el archivo"; } });
+}
+$("btnCsv").addEventListener("click",()=>$("file").click());
+$("file").addEventListener("change",e=>{ if(e.target.files[0]) loadCsv(e.target.files[0]); e.target.value=""; });
+addEventListener("dragover",e=>{ e.preventDefault(); $("drop").hidden=false; });
+addEventListener("dragleave",e=>{ if(!e.relatedTarget) $("drop").hidden=true; });
+addEventListener("drop",e=>{ e.preventDefault(); $("drop").hidden=true; const f=e.dataTransfer&&e.dataTransfer.files[0]; if(f) loadCsv(f); });
+
+resize(); aggregate(); requestAnimationFrame(tick);
+Promise.all([fetch("proyectos.json").then(r=>r.json()),fetch("ventas.json").then(r=>r.json())]).then(([p,u])=>{
+  setData(p,u,true,"Muestra parcial, no representativa · "+fmtN(u.length)+" ventas · "+fmtN(p.length)+" proyectos");
+  say("Sala lista. Tengo una muestra parcial del CODIP: "+fmtN(u.length)+" ventas en "+fmtN(p.length)+" proyectos. No es representativa del mercado, así que toma sus precios como demostración. Carga el CSV completo para ver los datos reales, o pídeme algo.");
+}).catch(()=>{ $("status").textContent="Sin datos · carga el CSV del CODIP"; say("No pude abrir la muestra. Carga el CSV del CODIP con el botón de arriba."); });
+})();
+</script>
